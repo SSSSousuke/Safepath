@@ -1,4 +1,5 @@
-classDiagram
+```mermaid
+    classDiagram
     direction TB
 
     %% =====================================================================
@@ -297,3 +298,4 @@ classDiagram
     Lighting_Lightmap <-- streetlights_processed_csv : reads processed CSV
     Gamification ..> UserIdentity : modifies user profile states
     UserIdentity <-- users_csv : read/write persistence
+```
