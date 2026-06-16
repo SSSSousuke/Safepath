@@ -1,0 +1,299 @@
+classDiagram
+    direction TB
+
+    %% =====================================================================
+    %% FRONTEND (WEB BROWSER UI)
+    %% =====================================================================
+    subgraph Frontend_Web_Browser
+        class React_SPA {
+            <<TypeScript>>
+            +index.tsx
+            +App.tsx
+            +SidebarUI
+            +loadPngOverlay()
+        }
+        class OpenLayers_Map {
+            <<Library>>
+            +OSM_Tiles
+            +VectorLayers
+        }
+        class Puppeteer_Tests {
+            <<Script>>
+            +PerformanceTest.js
+            +sendBenchmarkTraffic()
+        }
+    end
+
+    React_SPA --> OpenLayers_Map : integrates
+    Puppeteer_Tests --> HttpServer : API benchmark traffic (Port 8080)
+    React_SPA --> HttpServer : HTTP Request Stream
+
+    %% =====================================================================
+    %% BACKEND CORE & REST API HANDLERS (Java HttpServer / Port 8080)
+    %% =====================================================================
+    subgraph Java_Backend_Server
+        class HttpServer {
+            <<com.sun.net.httpserver>>
+            +Port 8080
+            +setExecutor(Executor)
+        }
+
+        %% --- REST API Handlers Box ---
+        class RegisterHandler { +handle(HttpExchange) }
+        class ProfileHandler { +handle(HttpExchange) }
+        class LeaderboardHandler { +handle(HttpExchange) }
+        class AchievementsHandler { +handle(HttpExchange) }
+        class LightmapInfoHandler { +handle(HttpExchange) }
+        class LightmapHandler { +handle(HttpExchange) }
+        class ReportsHandler { +handle(HttpExchange) }
+        class RoutesHandler { +handle(HttpExchange) }
+        class RoutePostHandler { +handle(HttpExchange) }
+        class ReportPostHandler { +handle(HttpExchange) }
+        class HeatmapInfoHandler { +handle(HttpExchange) }
+        class HeatmapHandler { +handle(HttpExchange) }
+        class ReportVerifyHandler { +handle(HttpExchange) }
+        class StaticFileHandler { +handle(HttpExchange) }
+    end
+
+    HttpServer *-- RegisterHandler
+    HttpServer *-- ProfileHandler
+    HttpServer *-- LeaderboardHandler
+    HttpServer *-- AchievementsHandler
+    HttpServer *-- LightmapInfoHandler
+    HttpServer *-- LightmapHandler
+    HttpServer *-- ReportsHandler
+    HttpServer *-- RoutesHandler
+    HttpServer *-- RoutePostHandler
+    HttpServer *-- ReportPostHandler
+    HttpServer *-- HeatmapInfoHandler
+    HttpServer *-- HeatmapHandler
+    HttpServer *-- ReportVerifyHandler
+    HttpServer *-- StaticFileHandler
+
+    %% =====================================================================
+    %% USER & GAMIFICATION SUBSYSTEM
+    %% =====================================================================
+    subgraph User_and_Gamification_Subsystem
+        class UserIdentity {
+            -Map~String,User~ usersByToken$
+            +loadUsers()$ void
+            +saveUsers()$ void
+            +register(String displayName)$ User
+            +getUser(String token)$ User
+            +updateUser(User user)$ void
+            +getTopByPoints(int limit)$ List~User~
+            +getTopByPointsWeekly(int limit)$ List~User~
+            +getUserRank(String token)$ int
+        }
+        class User {
+            +String token
+            +String displayName
+            +int points
+            +String badges
+            +long createdAt
+            +long lastActive
+            +int reportsSubmitted
+            +int reportsVerified
+            +int confirmationsGiven
+            +int routesQueried
+            +String categoriesUsed
+        }
+        class Gamification {
+            +int PTS_SUBMIT_COST$
+            +int PTS_REPORT_VERIFIED$
+            +int PTS_CONFIRM_REPORT$
+            +getLevel(int points)$ int
+            +awardReportVerified(User user)$ AwardResult
+            +awardConfirmReport(User user)$ AwardResult
+            +awardDetailedDesc(User user)$ AwardResult
+            +awardNewCell(User user)$ AwardResult
+            +awardRouteQuery(User user)$ AwardResult
+            +chargeSubmitReport(User user)$ AwardResult
+            +checkBadges(User user)$ List~Badge~
+        }
+        class Badge {
+            +String id
+            +String name
+            +String emoji
+            +String description
+            +HexadType hexadType
+        }
+        class HexadType {
+            <<enumeration>>
+            ACHIEVER
+            SOCIALIZER
+            PHILANTHROPIST
+            PLAYER
+            DISRUPTOR
+            FREE_SPIRIT
+        }
+        class AwardResult {
+            <<record>>
+            +int pointsAwarded
+            +int oldLevel
+            +int newLevel
+            +List~Badge~ newBadges
+        }
+        class Leaderboard {
+            +getLeaderboard(String period, int limit)$ List~Entry~
+            +getUserRank(String token)$ int
+        }
+    end
+
+    UserIdentity *-- User
+    Gamification *-- Badge
+    Gamification *-- HexadType
+    Gamification *-- AwardResult
+    RegisterHandler ..> UserIdentity : register()
+    ProfileHandler ..> UserIdentity : getUser()
+    LeaderboardHandler ..> UserIdentity : getTopByPoints()
+    AchievementsHandler ..> Gamification : getAllBadges()
+    LightmapInfoHandler ..> UserIdentity : getUser()
+    ReportPostHandler ..> Gamification : chargeSubmitReport()
+    LeaderboardHandler ..> Leaderboard : getLeaderboard()
+
+    %% =====================================================================
+    %% ROUTING ENGINE (GraphHopper Core)
+    %% =====================================================================
+    subgraph Routing_Engine_Module
+        class Routing_Java {
+            -GraphHopper fastHopper$
+            -SafePathHopper safeHopper$
+            +GenerateRoute(ArrayList params)$ byte[]
+            -initHopper()$ void
+        }
+        class SafePathWeighting {
+            -BaseGraph graph
+            +calcEdgeWeight(EdgeIteratorState edge, boolean reverse) double
+        }
+        class WeightCombiner {
+            +setProfile(String profile)$ void
+            +crimeMultiplier()$ double
+            +unlitMultiplier()$ double
+            +reportMultiplier()$ double
+            +calcSegmentScores(...) SegmentScores
+        }
+        class SegmentScores {
+            <<record>>
+            +int overall
+            +int crimeLevel
+            +int lit
+            +int reportNear
+        }
+    end
+
+    RoutesHandler ..> Routing_Java : GenerateRoute()
+    RoutePostHandler ..> Routing_Java : GenerateRoute()
+    Routing_Java *-- SafePathWeighting
+    SafePathWeighting ..> WeightCombiner : setProfile() / query multipliers
+    WeightCombiner *-- SegmentScores
+
+    %% =====================================================================
+    %% SAFETY DATA SUBSYSTEM
+    %% =====================================================================
+    subgraph Safety_Data_Subsystem
+        class UserReports {
+            -ArrayList~Report~ reports$
+            -Map~Integer,Set~String~~ verifications$
+            +addReport(...) Report
+            -autoConfirmNearby(Report newReport)$ void
+            +confirmReport(int reportId, String confirmerToken, boolean awardPoints)$ String
+            +isNearReport(double lat, double lon)$ boolean
+        }
+        class Report {
+            +int reportId
+            +double lat
+            +double lon
+            +double radius
+            +String category
+            +String description
+            +long timestamp
+            +String submitterToken
+            +String status
+        }
+        class Lighting {
+            -boolean[][] litGrid$
+            +isLit(double lat, double lon)$ boolean
+            +haversine(double lat1, double lon1, double lat2, double lon2)$ double
+        }
+        class Crime_Facade {
+            <<Crime>>
+            +getCrimeScore(double lat, double lon)$ int
+        }
+        class Crime_KDE {
+            -byte[] grid$
+            +getCrimeLevel(double lat, double lon)$ int
+        }
+        class Crime_RTM { +getScore(double lat, double lon)$ int }
+        class Crime_ML { +getScore(double lat, double lon)$ int }
+        
+        class Crime_KDE_Heatmap { +loadGrid(String path)$ void \n +getPng()$ byte[] }
+        class Lighting_Lightmap { +loadStreetlights(String path)$ void \n +getPng()$ byte[] }
+    end
+
+    ReportsHandler ..> UserReports : getAllReports() / removeReportById()
+    ReportPostHandler ..> UserReports : addReport()
+    ReportVerifyHandler ..> UserReports : confirmReport()
+    HeatmapInfoHandler ..> Crime_KDE_Heatmap : isLoaded()
+    HeatmapHandler ..> Crime_KDE_Heatmap : getPng()
+    LightmapInfoHandler ..> Lighting_Lightmap : isLoaded()
+    LightmapHandler ..> Lighting_Lightmap : getPng()
+
+    Crime_Facade ..> Crime_KDE : getCrimeLevel()
+    Crime_Facade ..> Crime_RTM : getScore()
+    Crime_Facade ..> Crime_ML : getScore()
+
+    %% SafePathWeighting Dynamic Core Queries
+    SafePathWeighting ..> UserReports : isNearReport()
+    SafePathWeighting ..> Lighting : isLit()
+    SafePathWeighting ..> Crime_Facade : getCrimeScore()
+    UserReports *-- Report
+
+    %% =====================================================================
+    %% DATA PIPELINE (PYTHON) & SYSTEM UTILITIES
+    %% =====================================================================
+    class CityConfig { +current()$ CityConfig \n +set(String cityName)$ void }
+    class Logging { +logError(String msg, Exception e)$ void }
+
+    Routing_Java ..> CityConfig : tracks active boundaries
+    Server ..> Logging : internal error tracking
+
+    subgraph Data_Pipeline_Scripts
+        class process_crime_py { <<Python>> }
+        class process_streetlights_py { <<Python>> }
+        class generate_kde_py { <<Python>> }
+    end
+
+    %% =====================================================================
+    %% PERSISTENT DATA FILES (Database-less Infrastructure)
+    %% =====================================================================
+    subgraph Data_Files
+        class errors_log { <<File>> Backend/data/errors.log }
+        class users_csv { <<File>> Backend/data/gamification/users.csv }
+        class graph_cache { <<Folder>> Backend/data/graph-cache/ }
+        class user_reports_csv { <<File>> Backend/data/user_reports.csv }
+        class raw_folder { <<Folder>> Backend/data/raw/ }
+        class crime_processed_csv { <<File>> Backend/data/processed/[city]/crime_processed.csv }
+        class streetlights_processed_csv { <<File>> Backend/data/processed/[city]/streetlights_processed.csv }
+        class kde_grid_byte { <<File>> Backend/data/processed/[city]/kde_grid.byte }
+    end
+
+    %% Pipeline Flow Mapping
+    raw_folder --> process_crime_py : consumes raw inputs
+    raw_folder --> process_streetlights_py : consumes raw inputs
+    process_crime_py --> generate_kde_py : pipes data
+    generate_kde_py --> kde_grid_byte : serializes grid data
+    process_crime_py --> crime_processed_csv : outputs clean telemetry
+    process_streetlights_py --> streetlights_processed_csv : outputs clean markers
+
+    %% Subsystem Writable/Readable Links
+    Logging --> errors_log : append
+    Routing_Java --> graph_cache : graph cache r/w
+    UserReports --> user_reports_csv : read/write persistence
+    
+    Crime_KDE <-- kde_grid_byte : reads binary grid
+    Crime_KDE_Heatmap <-- kde_grid_byte : reads binary grid
+    Lighting <-- streetlights_processed_csv : reads processed CSV
+    Lighting_Lightmap <-- streetlights_processed_csv : reads processed CSV
+    Gamification ..> UserIdentity : modifies user profile states
+    UserIdentity <-- users_csv : read/write persistence
